@@ -1,0 +1,26 @@
+{
+  "name": "school-chat-system",
+  "version": "1.0.0",
+  "description": "A simple real-time chat system for school networks",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "chat",
+    "socket.io",
+    "real-time",
+    "school",
+    "communication"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
