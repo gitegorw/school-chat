@@ -96,13 +96,35 @@
             font-size: 1.5em;
         }
 
-        .online-users {
+        .header-controls {
             position: absolute;
             right: 20px;
             top: 50%;
             transform: translateY(-50%);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .online-users {
             font-size: 0.9em;
             opacity: 0.9;
+        }
+
+        .leave-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 15px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: all 0.3s;
+        }
+
+        .leave-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
         }
 
         .chat-messages {
@@ -110,6 +132,38 @@
             overflow-y: auto;
             padding: 20px;
             background: #f8f9fa;
+            position: relative;
+            scroll-behavior: smooth;
+        }
+
+        .scroll-to-bottom {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s;
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .scroll-to-bottom.show {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .scroll-to-bottom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
         }
 
         .message {
@@ -262,10 +316,17 @@
         <div class="chat-screen hidden" id="chatScreen">
             <div class="chat-header">
                 <h1>School Chat Room</h1>
-                <div class="online-users" id="onlineUsers">Online: 0</div>
+                <div class="header-controls">
+                    <div class="online-users" id="onlineUsers">Online: 0</div>
+                    <button class="leave-btn" onclick="leaveChat()">Leave</button>
+                </div>
             </div>
             
-            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-messages" id="chatMessages">
+                <button class="scroll-to-bottom" id="scrollToBottom" onclick="scrollToBottom()">
+                    ↓
+                </button>
+            </div>
             
             <div class="typing-indicator hidden" id="typingIndicator"></div>
             
@@ -284,9 +345,49 @@
         let currentUser = '';
         let isTyping = false;
         let typingTimer;
+        let isUserScrolling = false;
+        let autoScrollEnabled = true;
 
         // Display server address
         document.getElementById('serverAddress').textContent = window.location.host;
+
+        // Auto-scroll management
+        const chatMessages = document.getElementById('chatMessages');
+        const scrollToBottomBtn = document.getElementById('scrollToBottom');
+
+        function isScrolledToBottom() {
+            return chatMessages.scrollHeight - chatMessages.clientHeight <= chatMessages.scrollTop + 1;
+        }
+
+        function scrollToBottom() {
+            chatMessages.scrollTo({
+                top: chatMessages.scrollHeight,
+                behavior: 'smooth'
+            });
+            autoScrollEnabled = true;
+            scrollToBottomBtn.classList.remove('show');
+        }
+
+        function checkScrollPosition() {
+            if (isScrolledToBottom()) {
+                autoScrollEnabled = true;
+                scrollToBottomBtn.classList.remove('show');
+            } else {
+                autoScrollEnabled = false;
+                scrollToBottomBtn.classList.add('show');
+            }
+        }
+
+        // Scroll event listener with throttling
+        let scrollTimeout;
+        chatMessages.addEventListener('scroll', () => {
+            isUserScrolling = true;
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                isUserScrolling = false;
+                checkScrollPosition();
+            }, 150);
+        });
 
         // Join chat function
         function joinChat() {
@@ -298,6 +399,23 @@
                 document.getElementById('loginScreen').classList.add('hidden');
                 document.getElementById('chatScreen').classList.remove('hidden');
                 document.getElementById('messageInput').focus();
+            }
+        }
+
+        // Leave chat function
+        function leaveChat() {
+            if (confirm('Are you sure you want to leave the chat?')) {
+                socket.emit('leave', currentUser);
+                currentUser = '';
+                
+                document.getElementById('chatScreen').classList.add('hidden');
+                document.getElementById('loginScreen').classList.remove('hidden');
+                document.getElementById('usernameInput').value = '';
+                document.getElementById('chatMessages').innerHTML = '<button class="scroll-to-bottom" id="scrollToBottom" onclick="scrollToBottom()">↓</button>';
+                
+                // Reset scroll state
+                autoScrollEnabled = true;
+                scrollToBottomBtn.classList.remove('show');
             }
         }
 
@@ -330,7 +448,6 @@
 
         // Add message to chat
         function addMessage(data, isOwn = false, isSystem = false) {
-            const chatMessages = document.getElementById('chatMessages');
             const messageElement = document.createElement('div');
             
             if (isSystem) {
@@ -345,8 +462,19 @@
                 `;
             }
             
-            chatMessages.appendChild(messageElement);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            // Insert before the scroll button
+            chatMessages.insertBefore(messageElement, scrollToBottomBtn);
+            
+            // Auto-scroll only if user is at bottom or it's their own message
+            if (autoScrollEnabled || isOwn) {
+                setTimeout(() => {
+                    if (!isUserScrolling) {
+                        scrollToBottom();
+                    }
+                }, 50);
+            } else {
+                checkScrollPosition();
+            }
         }
 
         // Update online users count
@@ -411,6 +539,18 @@
         socket.on('disconnect', () => {
             console.log('Disconnected from server');
             addMessage('Connection lost. Please refresh the page.', false, true);
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Escape to leave chat
+            if (e.key === 'Escape' && currentUser) {
+                leaveChat();
+            }
+            // End key to scroll to bottom
+            if (e.key === 'End' && currentUser) {
+                scrollToBottom();
+            }
         });
     </script>
 </body>
